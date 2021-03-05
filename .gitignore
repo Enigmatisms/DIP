@@ -1,0 +1,6 @@
+*.png
+*.jpg
+*.txt
+*.bmp
+build/
+.vscode/
