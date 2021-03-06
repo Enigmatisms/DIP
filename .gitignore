@@ -1,6 +1,7 @@
 *.png
 *.jpg
-*.txt
 *.bmp
 build/
+data/
 .vscode/
+# *.txt
