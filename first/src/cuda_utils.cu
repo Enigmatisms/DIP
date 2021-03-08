@@ -36,7 +36,13 @@ __global__ void copyMakeBorder(const uchar* const src, uchar* dst, int cols, int
 }
 
 __global__ void imgShear(const uchar* const src, uchar* dst, int rows, int cols, double ratio) {
-    ;
+    int i = blockIdx.y, j = blockIdx.x;
+    int cy = rows / 2;
+    int dx = double(cy - i) * ratio;
+    int base = i * cols, newx = j + dx;
+    if (newx >= 0 && newx < cols) {
+        dst[base + newx] = src[base + j];
+    }
 }
 
 __global__ void nearestInterp(const unsigned char* const src, unsigned char* dst, int cols, int k) {

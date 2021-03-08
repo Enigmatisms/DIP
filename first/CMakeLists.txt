@@ -39,7 +39,7 @@ if (CUDA_PROJECT)
     )
 
     cuda_add_executable(Task
-        otherOps.cu
+        transInterp.cu
         ${SRC}
     )
 

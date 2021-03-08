@@ -21,7 +21,7 @@ __global__ void copyMakeBorder(const unsigned char* const src, unsigned char* ds
 __global__ void imgRotate(const unsigned char* const src, unsigned char* dst, int rows, int cols, double angle);
 
 /// @brief 图像斜切变换
-__global__ void imgShear(const unsigned char* const src, unsigned char* dst, int rows, int cols, double ratio);
+__global__ void imgShear(const unsigned char* const src, unsigned char* dst, int rows, int cols, double ratio = 0.333);
 
 /// @brief 中值滤波（图像旋转 / 斜切会造成空缺，需要填补）
 __global__ void medianFilter(const unsigned char* const src, unsigned char* dst, int rows, int cols, int radius = 2);

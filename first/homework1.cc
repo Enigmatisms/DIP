@@ -45,6 +45,22 @@ void imgCrop(const uchar* const data, int px, int py, int step, uchar* buf) {
     }
 }
 
+
+void linearInterpZoom(const cv::Mat& src, cv::Mat& dst, int k = 4) {
+    cv::Mat padding;
+    int nrows = src.rows * k, ncols = src.cols * k;
+    dst = cv::Mat::zeros(cv::Size(ncols, nrows), CV_8UC1);
+    cv::copyMakeBorder(src, padding, 1, 1, 1, 1, CV_HAL_BORDER_REPLICATE);      // opencv padding操作
+    uint64_t start_t = getCurrentTime();
+    #pragma omp parallel for num_threads(8)
+    for (size_t i = 0; i < nrows; i++) {
+        int base = i * ncols;
+        for (size_t j = 0; j < ncols; j++) {
+            ;
+        }
+    }
+}
+
 template<typename T>
 void getWeightVector(T* res, double z, double a = -0.5){
     for (int i = -1, cnt = 0; cnt < 4; i++, cnt++){
@@ -66,21 +82,6 @@ uchar calcWeightSum(const T* const wx, const T* const wy, const uchar* const buf
         }
     }
     return uchar(res);
-}
-
-void linearInterpZoom(const cv::Mat& src, cv::Mat& dst, int k = 4) {
-    cv::Mat padding;
-    int nrows = src.rows * k, ncols = src.cols * k;
-    dst = cv::Mat::zeros(cv::Size(ncols, nrows), CV_8UC1);
-    cv::copyMakeBorder(src, padding, 1, 1, 1, 1, CV_HAL_BORDER_REPLICATE);      // opencv padding操作
-    uint64_t start_t = getCurrentTime();
-    #pragma omp parallel for num_threads(8)
-    for (size_t i = 0; i < nrows; i++) {
-        int base = i * ncols;
-        for (size_t j = 0; j < ncols; j++) {
-            ;
-        }
-    }
 }
 
 void biCubicInterpZoom(const cv::Mat& src, cv::Mat& dst, int k = 4) {
