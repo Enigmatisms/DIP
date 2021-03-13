@@ -43,6 +43,15 @@ if (CUDA_PROJECT)
         ${SRC}
     )
 
+    cuda_add_executable(Task2
+        level8.cu
+        ${SRC}
+    )
+
+    target_link_libraries(Task2
+        ${OpenCV_LIBS}
+    )
+
 else()
     find_package(OpenMP)
     if (OPENMP_FOUND)

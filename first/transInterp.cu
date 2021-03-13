@@ -68,9 +68,6 @@ int main(int argc, char* argv[]){
     uint64_t end_t = getCurrentTime();
     printf("CUDA time elapsed: %lf\n ms", double(end_t - start_t) / 1e6);
     printf("Interpolation completed.\n");
-    biCubicInterpZoom(trans_img, result);
-    cv::imwrite(path + "transed.bmp", trans_img);
-    cv::imwrite(path + name + "_bicubic_shear.bmp", result);
     
     printf("Output completed.\n");
 
