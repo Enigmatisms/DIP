@@ -24,20 +24,6 @@ endif()
 
 set(OpenCV_INCLUDE_DIRS "/home/sentinel/opencv-4.5.1/include/")
 set(${OpenCV_LIBS} "/home/sentinel/opencv-4.5.1/lib/")
-list(APPEND CUDA_NVCC_FLAGS -DCLI11_BOOST_OPTIONAL=0;)
-
-find_package(CUDA REQUIRED)
-set(
-    CUDA_NVCC_FLAGS
-    ${CUDA_NVCC_FLAGS};
-    -O3 --use_fast_math
-    -gencode=arch=compute_30,code=sm_30
-    -gencode=arch=compute_35,code=sm_35
-    -gencode=arch=compute_50,code=sm_50
-    -gencode=arch=compute_52,code=sm_52
-    -gencode=arch=compute_61,code=sm_61
-    -gencode=arch=compute_70,code=sm_70
-)
 
 include_directories(
     .
@@ -51,8 +37,8 @@ link_directories(
     /usr/local/lib
 )
 
-cuda_add_executable(Task
-    align.cu
+add_executable(Task
+    align.cc
 )
 
 target_link_libraries(Task

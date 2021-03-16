@@ -9,23 +9,9 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/calib3d.hpp>
 #include <opencv2/features2d.hpp>
-#include <cuda.h>
-#include <cuda_runtime.h>
-#include <device_launch_parameters.h>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <iostream>
-
-static void CheckCudaErrorAux (const char *, unsigned, const char *, cudaError_t);
-#define CUDA_CHECK_RETURN(value) CheckCudaErrorAux(__FILE__,__LINE__, #value, value)
-
-static void CheckCudaErrorAux (const char *file, unsigned line, const char *statement, cudaError_t err) {
-	if (err == cudaSuccess)
-		return;
-	std::cerr << statement<<" returned " << cudaGetErrorString(err) << "("<<err<< ") at "<<file<<":"<<line <<
-			std::endl;
-	exit (1);
-}
 
 template<typename T>
 void printMat(const T& mat, int size){
@@ -52,11 +38,12 @@ void hMatrixSolver(
     for (size_t i = 0; i < matches.size(); i++) {
         const cv::Point2f& _p1 = pts1[matches[i].queryIdx].pt;
         const cv::Point2f& _p2 = pts2[matches[i].trainIdx].pt;
-        double p1x = _p1.x, p1y = _p1.y, p2x = _p2.x, p2y = _p2.y;
-        P.block<3, 1>(0, i) = Eigen::Vector3d(p1x, p1y, 1);
-        Q.block<3, 1>(0, i) = Eigen::Vector3d(p2x, p2y, 1);
+        P.block<3, 1>(0, i) = Eigen::Vector3d(_p1.x, _p1.y, 1);
+        Q.block<3, 1>(0, i) = Eigen::Vector3d(_p2.x, _p2.y, 1);
     }
-    Eigen::Matrix3d inv = (P * P.transpose()).ldlt().solve(Eigen::Matrix3d::Identity());    // LDLT分解求逆矩阵 (PP^T)
+    Eigen::Matrix3d PPT = P * P.transpose();
+    Eigen::Matrix3d inv = (PPT).ldlt().solve(Eigen::Matrix3d::Identity());    // LDLT分解求逆矩阵 (PP^T)
+    Eigen::Matrix3d res = PPT * inv;
     H = Q * P.transpose() * inv;
 }
 
@@ -68,7 +55,7 @@ void featureExtract(
 ){
     std::vector<cv::DMatch> matches;
     std::vector<cv::KeyPoint> pts1, pts2;
-    #define POINT_NUM 4096
+    #define POINT_NUM 64
     cv::Mat dscp1, dscp2;
     #pragma omp parallel sections
     {
@@ -96,7 +83,7 @@ void featureExtract(
     }
     cv::Mat mask;
     
-    cv::findHomography(crn1, crn2, mask, cv::RANSAC, 16);
+    cv::Mat cvH = cv::findHomography(crn1, crn2, mask, cv::RANSAC, 16);
     printf("Homography found. mask is %d, %d, %d, %d\n", mask.cols, mask.rows, mask.type(), CV_8UC1);
     printf("The original match num is %lu.\n", matches.size());
     std::vector<cv::DMatch> truth;
@@ -106,59 +93,51 @@ void featureExtract(
         }
     }
     cv::drawMatches(src1, pts1, src2, pts2, truth, dst);
-    hMatrixSolver(matches, pts1, pts2, H);
+    hMatrixSolver(truth, pts1, pts2, H);
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            printf("%lf, ", cvH.at<double>(i, j));
+        }
+        printf("\n");
+    }
 }
 
 
 /// 可视化
-__global__ void alignmentVisualize(const uchar* const src, uchar* dst, int cols, int rows, const double* const H) {
-    int y = blockIdx.y, x = blockIdx.x;
-    double now[3] = {x, y, 1.0};
-    double trans[3] = {0.0, 0.0, 0.0};
-    for (int i = 0; i < 2; i++) {
-        for (int j = 0; j < 3; j++) {
-            trans[i] += H[i * 3 + j] * now[j];
+void alignmentVisualize(const cv::Mat& src, cv::Mat&dst, Eigen::Matrix3d H) {
+    dst.create(src.rows, src.cols, CV_8UC3);
+    #pragma for num_threads(8);
+    for (int i = 0; i < src.rows; i++) {
+        for (int j = 0; j < src.cols; j++) {
+            Eigen::Vector3d now(j, i, 1.0);
+            Eigen::Vector3d trans = H * now;
+            int px = trans[0], py = trans[1];
+            if (px >= 0 && px < dst.cols && py >= 0 && py < dst.rows) {
+                dst.at<cv::Vec3b>(py, px) = src.at<cv::Vec3b>(i, j);
+            } 
         }
     }
-    int px = trans[0], py = trans[1];
-    if (px >= 0 && px < cols && py >= 0 && py < rows) {
-        dst[(px + py * cols) * 3 + 0] = src[3 * (x + y * cols) + 0];
-        dst[(px + py * cols) * 3 + 1] = src[3 * (x + y * cols) + 1];
-        dst[(px + py * cols) * 3 + 2] = src[3 * (x + y * cols) + 2];
-    } 
 }
 
 int main() {
     cv::Mat src1 = cv::imread("../data/ImageA.jpg");
     cv::Mat src2 = cv::imread("../data/ImageB.jpg");
-    cv::Mat aligned(src1.rows, src1.cols, CV_8UC3);
+    cv::Mat gray1, gray2;
+    cv::cvtColor(src1, gray1, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(src2, gray2, cv::COLOR_BGR2GRAY);
+    cv::equalizeHist(gray1, gray1);
+    cv::equalizeHist(gray2, gray2);
+    cv::Mat aligned;
     cv::Mat feats;
 
-    uchar *cu_align, *cu_img;
     Eigen::Matrix3d H;
-    double* dev_H;
-    size_t sz = sizeof(uchar) * src1.rows * src1.cols * src1.channels();
-    CUDA_CHECK_RETURN(cudaMalloc((void **)&dev_H, sizeof(double) * 9));
-    CUDA_CHECK_RETURN(cudaMalloc((void **)&cu_align, sz));
-    CUDA_CHECK_RETURN(cudaMalloc((void **)&cu_img, sz));
 
-    featureExtract(src1, src2, feats, H);
+    featureExtract(gray1, gray2, feats, H);
     std::cout << "H matrix is:\n";
     printMat<Eigen::Matrix3d>(H, 3);
     cv::imwrite("../data/features.jpg", feats);
 
-    CUDA_CHECK_RETURN(cudaMemcpy(dev_H, H.data(), sizeof(double) * 9, cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(cu_img, src1.data, sz, cudaMemcpyHostToDevice));
-    dim3 grid(src1.cols, src1.rows);
-    alignmentVisualize<<<grid, 1>>>(cu_img, cu_align, src1.cols, src1.rows, dev_H);
-
-    CUDA_CHECK_RETURN(cudaMemcpy(aligned.data, cu_align, sz, cudaMemcpyDeviceToHost));
-    cv::Mat result;
-    cv::hconcat(aligned, src2, result);
-    cv::imwrite("../data/result.jpg", result);
-
-    CUDA_CHECK_RETURN(cudaFree(dev_H));
-    CUDA_CHECK_RETURN(cudaFree(cu_align));
-    CUDA_CHECK_RETURN(cudaFree(cu_img));
+    alignmentVisualize(src1, aligned, H);
+    cv::imwrite("../data/result.jpg", aligned);
     return 0;
 }
