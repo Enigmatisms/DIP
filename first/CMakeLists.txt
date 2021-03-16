@@ -18,7 +18,7 @@ endif()
 
 set(OpenCV_INCLUDE_DIRS "/home/sentinel/opencv-4.5.1/include/")
 set(${OpenCV_LIBS} "/home/sentinel/opencv-4.5.1/lib/")
-set(CUDA_PROJECT TRUE)
+set(CUDA_PROJECT FALSE)
 
 if (CUDA_PROJECT)
     find_package(CUDA REQUIRED)

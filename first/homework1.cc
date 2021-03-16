@@ -125,5 +125,10 @@ int main() {
     cv::imshow("disp", dst);
     cv::waitKey(0);
     cv::imwrite("../data/czoomed.bmp", dst);
+    std::pair<double, double> res = getMeanVar(img, false);
+    printf("Mean: %lf, Var: %lf\n", res.first, res.second);
+    res = getMeanVar(img, true);
+    printf("Mean: %lf, Var: %lf\n", res.first, res.second);
+    
     return 0;
 }
