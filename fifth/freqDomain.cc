@@ -1,12 +1,19 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
+#include <map>
 #include <vector>
 #include <iostream>
 
 // 距离中心距离dist, d0是滤波器的cut off coeff, n0是有阶滤波器的阶数 
 typedef double (*FilterCallBack)(double dist, double d0, int n0);
 using Scalar = cv::Scalar_<int>;
+
+std::vector<std::string> names = {
+    "test1.pgm", "test2.tif", "test3.pgm", "test4.tif", "test5.tif"
+};
+
+std::string opath_prefix = "../data/result/";
 
 /// @brief 输入8位，输出将会是2通道64位的
 void imageDFT(const cv::Mat& src, cv::Mat& dst, cv::Scalar& mean, Scalar& info) {
@@ -53,7 +60,8 @@ void displayDFT(const cv::Mat& src, Scalar info, cv::Scalar mean, std::string op
         cv::imshow("dft", disp);
         cv::waitKey(0);
     }
-    cv::Mat test_dst;
+    cv::normalize(disp, disp, 0, 255, cv::NORM_MINMAX);
+    disp.convertTo(disp, CV_8UC1);
     cv::imwrite(opath, disp);
 }
 
@@ -76,7 +84,7 @@ inline double GHPF(double dist, double d0, int n0) {
 }
 
 inline double laplacian(double dist, double d0, int n0) {
-    return -4.0 * 3.14159265 * std::pow(dist, 2);
+    return 4.0 * 3.14159265 * std::pow(dist / d0, 2);
 }
 
 /// 由于opencv 输出的结果并不是中心化的频谱，所以需要进行一些特殊操作
@@ -99,17 +107,41 @@ void applyFreqFilter(const cv::Mat& dft_img, cv::Mat& dst, FilterCallBack filter
     }
 }
 
+void applyFilters(bool low_pass, bool composition = false) {
+    std::map<std::string, FilterCallBack> mapping;
+    if (low_pass)
+        mapping = {
+            {"_BLPF_40.jpg", BLPF},
+            {"_GLPF_40.jpg", GLPF}
+        };
+    else 
+        mapping = {
+            {"_BHPF_40.jpg", BHPF},
+            {"_GHPF_40.jpg", GHPF},
+            {"_Laplace.jpg", laplacian}
+        };
+    for (size_t i = 0; i < names.size(); i++) {
+        int padx = 0, pady = 0;
+        cv::Scalar mean;
+        Scalar info;
+        cv::Mat img = cv::imread("../data/" + names[i], 0), dft_img, dst;
+        imageDFT(img, dft_img, mean, info);
+        displayDFT(dft_img, info, mean, opath_prefix + "FT_test" + std::to_string(i + 1) + ".jpg", false);
+        for (const std::pair<std::string, FilterCallBack>& pr: mapping) {
+            applyFreqFilter(dft_img, dst, pr.second, 100.0, 2);
+            imageIDFT(dst, dst, mean, info);
+            if (composition) {
+                dst = img + dst - cv::mean(dst);
+                cv::imwrite(opath_prefix + "sharp_test" + std::to_string(i + 1) + pr.first, dst);
+            }
+            else {
+                cv::imwrite(opath_prefix + "test" + std::to_string(i + 1) + pr.first, dst);
+            }
+        }
+    }
+} 
+
 int main() {
-    cv::Mat img = cv::imread("../data/test3.pgm", 0), dft_img, dst;
-    int padx = 0, pady = 0;
-    cv::Scalar mean;
-    Scalar info;
-    imageDFT(img, dft_img, mean, info);
-    displayDFT(dft_img, info, mean, "../data/dft_output.jpg", true);
-    // dft_img(cv::Rect(50, 50, dft_img.cols - 50, dft_img.rows - 50)) = 0;
-    imageIDFT(dft_img, dst, mean, info);
-    cv::imshow("result", dst);
-    cv::imshow("origin", img);
-    cv::waitKey(0);
+    applyFilters(false, true);
     return 0;
 }
