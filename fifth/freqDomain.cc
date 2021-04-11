@@ -87,6 +87,23 @@ inline double laplacian(double dist, double d0, int n0) {
     return 4.0 * 3.14159265 * std::pow(dist / d0, 2);
 }
 
+double calculateSpectrumRatio(const cv::Mat& origin, const cv::Mat& filtered) {
+    cv::Mat noise = origin - filtered;
+    double fil_val = 0.0, noise_val = 0.0;
+    for (int i = 0; i < filtered.rows; i++) {
+        const double* fptr = filtered.ptr<double>(i);
+        const double* nptr = noise.ptr<double>(i);
+        for (int j = 0; j < filtered.cols; j++) {
+            double fval = *(fptr + j);
+            double nval = *(nptr + j);
+            fil_val += std::pow(fval, 2);
+            noise_val += std::pow(nval, 2);
+        }
+    }
+    printf("Preserved ratio: %lf\n", (fil_val) / (fil_val + noise_val));
+    return fil_val / noise_val;     // 功率期望 比 噪声期望（面积归一化项被约掉了）
+}
+
 /// 由于opencv 输出的结果并不是中心化的频谱，所以需要进行一些特殊操作
 void applyFreqFilter(const cv::Mat& dft_img, cv::Mat& dst, FilterCallBack filter, double d0, int n0) {
     int half_row = dft_img.rows / 2;
@@ -105,20 +122,21 @@ void applyFreqFilter(const cv::Mat& dft_img, cv::Mat& dst, FilterCallBack filter
             dst.at<double>(i, j) *= filter(dist, d0, n0);
         }
     }
+    double ratio = calculateSpectrumRatio(dft_img, dst);
+    printf("Spectrum ratio is %lf\n", ratio);
 }
 
 void applyFilters(bool low_pass, bool composition = false) {
     std::map<std::string, FilterCallBack> mapping;
     if (low_pass)
         mapping = {
-            {"_BLPF_40.jpg", BLPF},
-            {"_GLPF_40.jpg", GLPF}
+            {"_BLPF_20.jpg", BLPF},
+            {"_GLPF_20.jpg", GLPF}
         };
     else 
         mapping = {
-            {"_BHPF_40.jpg", BHPF},
-            {"_GHPF_40.jpg", GHPF},
-            {"_Laplace.jpg", laplacian}
+            {"_BHPF_20.jpg", BHPF},
+            {"_GHPF_20.jpg", GHPF},
         };
     for (size_t i = 0; i < names.size(); i++) {
         int padx = 0, pady = 0;
@@ -128,7 +146,8 @@ void applyFilters(bool low_pass, bool composition = false) {
         imageDFT(img, dft_img, mean, info);
         displayDFT(dft_img, info, mean, opath_prefix + "FT_test" + std::to_string(i + 1) + ".jpg", false);
         for (const std::pair<std::string, FilterCallBack>& pr: mapping) {
-            applyFreqFilter(dft_img, dst, pr.second, 100.0, 2);
+            std::cout << '\n' << names[i] << ": " << pr.first << " filter: \n";
+            applyFreqFilter(dft_img, dst, pr.second, 20.0, 2);
             imageIDFT(dst, dst, mean, info);
             if (composition) {
                 dst = img + dst - cv::mean(dst);
@@ -141,7 +160,10 @@ void applyFilters(bool low_pass, bool composition = false) {
     }
 } 
 
-int main() {
-    applyFilters(false, true);
+int main(int argc, char* argv[]) {
+    if (argc < 3) {
+        std::cerr << "Usage: ./Task <low_pass?> <composition?>";
+    }
+    applyFilters(atoi(argv[1]), atoi(argv[2]));
     return 0;
 }
