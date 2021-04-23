@@ -21,12 +21,7 @@
 // #define BILATERAL   128      // 双边滤波
 // #define INVERSE     256     // 逆谐波均值滤波 (*)
 
-int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cerr << "Usage: ./Task <Kernel size>\n";
-        return -1;
-    }
-    int ksz = atoi(argv[1]);
+void prob_1_and_2(int ksize) {
     DeNoise dns;
     cv::Mat img = cv::imread("../data/lena.bmp", 0), noised, res;
 
@@ -43,10 +38,31 @@ int main(int argc, char* argv[]) {
         for (const std::string& name: names) {
             dns.naiveDeNoise(noised, res, filter);
             filter <<= 1;       // 左移一位
-            std::string opath = "../data/result/" + noise_names[i] + name + std::to_string(ksz) + ".jpg";
+            std::string opath = "../data/result/" + noise_names[i] + name + std::to_string(ksize) + ".jpg";
             std::cout << "Image exported to'" << opath << "'\n";
             cv::imwrite(opath, res);
         }
     }
+}
+
+void prob_3(int ksz) {
+    DeNoise dns;
+    cv::Mat img = cv::imread("../data/lena.bmp", 0), noised, res;
+    dns.motionBlur(img, noised, 15);
+    dns.imgAddNoise(noised, img, true, 0, 10);
+    cv::imwrite("../data/result/motion_blur.jpg", noised);
+    cv::imwrite("../data/result/motion_blur_gaussian.jpg", img);
+    cv::imshow("disp", img);
+    cv::waitKey(0);
+}
+
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        std::cerr << "Usage: ./Task <Kernel size>\n";
+        return -1;
+    }
+    int ksz = atoi(argv[1]);
+    prob_3(ksz);
+
     return 0;
 }

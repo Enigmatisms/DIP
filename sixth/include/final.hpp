@@ -46,15 +46,16 @@ public:
     DeNoise() {;}
     ~DeNoise() {;}
 public:
-    void naiveDeNoise(const cv::Mat& src, cv::Mat& dst, int op);
-    void planeFiltering(const cv::Mat& src, const cv::Mat& kernel, cv::Mat& dst);
-    void imgAddNoise(const cv::Mat& src, cv::Mat& dst, bool use_gauss, int mu = 10, int sig = 20);
+    void naiveDeNoise(const cv::Mat& src, cv::Mat& dst, int op) const;
+    void planeFiltering(const cv::Mat& src, const cv::Mat& kernel, cv::Mat& dst) const;
+    void imgAddNoise(const cv::Mat& src, cv::Mat& dst, bool use_gauss, int mu = 10, int sig = 20) const;
 
     template <int ARITHM>
-    void arithmaticFiltering(const cv::Mat& src, cv::Mat& dst, int ksize, int q = 1);
+    void arithmaticFiltering(const cv::Mat& src, cv::Mat& dst, int ksize, int q = 1) const;
 
     template <int SELECT>
-    void minMaxFiltering(const cv::Mat& src, cv::Mat& dst, int ksize);
+    void minMaxFiltering(const cv::Mat& src, cv::Mat& dst, int ksize) const;
+    void motionBlur(const cv::Mat& src, cv::Mat& dst, int ksize) const;
 private:
     static cv::Mat getMeanKernel(int size) {
         return cv::Mat::ones(size, size, CV_64FC1) / double(size) / double(size);
