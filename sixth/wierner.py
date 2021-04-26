@@ -14,9 +14,9 @@ from torch import optim
 from torch.autograd import Variable as Var
 from numpy import fft
 
-def FourierTransform(img, show = True):
+def FourierTransform(img, show = True, save = False):
     fft_res = fft.fft2(img)
-    if show == True:
+    if show == True or save == True:
         rl = fft_res.real
         im = fft_res.imag
         amp = np.sqrt(rl ** 2 + im ** 2)
@@ -32,11 +32,15 @@ def FourierTransform(img, show = True):
         amp_show[:halfh, halfw:] = amp[halfh:, :halfw]
         amp_show[halfh:, halfw:] = amp[:halfh, :halfw]
         phase = np.arctan(im / rl)
-        plt.subplot(1, 2, 1)
-        plt.imshow(amp_show)
-        plt.subplot(1, 2, 2)
-        plt.imshow(phase)
-        plt.show()
+        if show:
+            plt.subplot(1, 2, 1)
+            plt.imshow(amp_show)
+            plt.subplot(1, 2, 2)
+            plt.imshow(phase)
+            plt.show()
+        if save:
+            print(amp_show)
+            cv.imwrite("./data/result/blur_ft_amp.jpg", amp_show )
     return fft_res
 
 def motionBlur2(img, T = 15, show = False):
@@ -52,9 +56,9 @@ def motionBlur2(img, T = 15, show = False):
         plt.show()
     return res, H
 
-def wholeNoise(img, T, show = False):
+def wholeNoise(img, T, show = False, noise_deg = 10):
     motion_blur, H = motionBlur2(img)
-    noise = np.random.normal(0, 10, motion_blur.shape)
+    noise = np.random.normal(0, noise_deg, motion_blur.shape)
     noise_amp = np.sum((noise ** 2) / (img.shape[0] * img.shape[1]))
     motion_blur += noise
     res = np.clip(motion_blur, 0, 255)
@@ -84,20 +88,22 @@ def getH(height, width, T):
     yy = 2 * np.pi * yy.astype(float) / float(height)
     return discreteDegrade(xx, yy, T)
 
-def wienerFilter(img, T):
+def wienerFilter(img, T, noise_deg):
     output = img.copy()
-    noised, H = wholeNoise(output, T)
+    noised, H, nm = wholeNoise(output, T, noise_deg = noise_deg)
     cv.imwrite("./data/result/motion_blur_freq.jpg", noised)
-    G = FourierTransform(noised, False)
+    G = FourierTransform(noised, False, True)
     H_amp = np.abs(H) ** 2
-    R = H_amp / (H_amp + 100) / H
+    R = H_amp / (H_amp + nm) / H
     F = R * G
     res = np.abs(fft.ifft2(F))
-    plt.subplot(1, 2, 1)
-    plt.imshow(noised)
-    plt.subplot(1, 2, 2)
-    plt.imshow(res)
-    plt.show()
+    print(res)
+    cv.imwrite("./data/result/result_%d.jpg"%(noise_deg), res * 100)
+    # plt.subplot(1, 2, 1)
+    # plt.imshow(noised)
+    # plt.subplot(1, 2, 2)
+    # plt.imshow(res)
+    # plt.show()
 
 """
     思想：时域的均方误差 等价于 频域的均方误差，故最小二乘可以在频域做
@@ -118,22 +124,26 @@ def constrainedMSEFiltering(img, T):
     noise = torch.DoubleTensor([noise_map])
 
     r = Var(torch.DoubleTensor([0.1, ]), requires_grad = True)
-    optimizer = optim.Adam([r, ], lr = 1e-2)
+    optimizer = optim.Adam([r, ], lr = 1e-1)
+    sch = optim.lr_scheduler.ExponentialLR(optimizer, 0.9995, -1)
     h, w = img.shape
 
-    epochs = 1000
-    for i in range(100):
+    epochs = 300
+    for i in range(epochs):
         F_hat = Hinv / (Hamp + r * L2) * G_
         lMat = G_ - H_ * F_hat
         diff = torch.sum(torch.abs(lMat) ** 2) / h / w
         loss = (noise - diff) ** 2
         loss.backward()
         optimizer.step()
+        sch.step(i);
         optimizer.zero_grad()
-        print("Training epoch: %d / %d \tloss: "%(i, epochs), loss.detach().item())
+        lr = sch.get_lr()[0]
+        print("Training epoch: %d / %d \tloss: %f \tlr: %f"%(i, epochs, loss.detach().item(), lr))
     res = F_hat.detach().numpy()
     res = np.abs(fft.ifft2(res))
-    cv.imwrite("./data/result/optimized.jpg", res)
+    print(res)
+    # cv.imwrite("./data/result/optimized.jpg", res)
 
 def getLaplacianAmp(height, width):
     xx, yy = np.meshgrid(np.arange(width), np.arange(height))
@@ -143,5 +153,5 @@ def getLaplacianAmp(height, width):
 if __name__ == "__main__":
     img = cv.imread("./data/lena.bmp", 0)
     # print(FourierTransform(np.array([[0., -1., 0.], [-1., 4., -1.], [0., -1., 0.]]), False))
-    # wienerFilter(img, 15)
-    constrainedMSEFiltering(img, 15)
+    wienerFilter(img, 15, 10)
+    # constrainedMSEFiltering(img, 15)
